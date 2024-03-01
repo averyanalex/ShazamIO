@@ -14,7 +14,6 @@ setuptools.setup(
     install_requires=[
         "aiohttp",
         "pydub",
-        "numpy",
         "aiofiles",
         "dataclass-factory",
         "shazamio_core",

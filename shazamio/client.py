@@ -12,9 +12,13 @@ from shazamio.utils import validate_json
 
 class HTTPClient(HTTPClientInterface):
     def __init__(self, retry_options: Optional[RetryOptionsBase] = None):
-        self.retry_options = retry_options
-        self.trace_config = TraceConfig()
-        self.trace_config.on_request_start.append(self.on_request_start)
+        trace_config = TraceConfig()
+        trace_config.on_request_start.append(self.on_request_start)
+        self.retry_client = RetryClient(
+            retry_options=retry_options,
+            raise_for_status=False,
+            trace_configs=[trace_config],
+        )
 
     async def on_request_start(
         self,
@@ -41,23 +45,18 @@ class HTTPClient(HTTPClientInterface):
         *args,
         **kwargs,
     ) -> Union[List[Any], Dict[str, Any]]:
-        async with RetryClient(
-            retry_options=self.retry_options,
-            raise_for_status=False,
-            trace_configs=[self.trace_config],
-        ) as client:
-            if method.upper() == "GET":
-                async with client.get(url, **kwargs) as resp:
-                    try:
-                        return await validate_json(resp, *args)
-                    except FailedDecodeJson as e:
-                        raise e
+        if method.upper() == "GET":
+            async with self.retry_client.get(url, **kwargs) as resp:
+                try:
+                    return await validate_json(resp, *args)
+                except FailedDecodeJson as e:
+                    raise e
 
-            elif method.upper() == "POST":
-                async with client.post(url, **kwargs) as resp:
-                    try:
-                        return await validate_json(resp, *args)
-                    except FailedDecodeJson as e:
-                        raise e
-            else:
-                raise BadMethod("Accept only GET/POST")
+        elif method.upper() == "POST":
+            async with self.retry_client.post(url, **kwargs) as resp:
+                try:
+                    return await validate_json(resp, *args)
+                except FailedDecodeJson as e:
+                    raise e
+        else:
+            raise BadMethod("Accept only GET/POST")
